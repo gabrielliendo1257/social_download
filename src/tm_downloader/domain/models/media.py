@@ -1,6 +1,8 @@
 import asyncio
 import threading
+from dataclasses import dataclass
 from enum import Enum
+from urllib.parse import urlparse
 
 
 class DownloaderStatus(Enum):
@@ -10,6 +12,14 @@ class DownloaderStatus(Enum):
     ERROR = 3
     NO_INITIALIZED = 4
     FINISHED = 5
+
+
+class ChatType(Enum):
+    INVITE = 1
+    PRIVATE = 2
+    PUBLIC_THREAD = 3
+    PUBLIC = 4
+    PROFILE = 5
 
 
 class MediaBase:
@@ -27,6 +37,14 @@ class MediaBase:
     @caption.setter
     def caption(self, value):
         self.__aption = value
+
+
+@dataclass
+class UrlTelegramParts:
+    chat_id: int | str | None
+    thread_id: int | None
+    message_id: int | None
+    chat_type: ChatType
 
 
 class AsyncLoopRunner:

@@ -10,7 +10,8 @@ requires-python = ">=3.10"
 dependencies = [
     "telethon (==1.41.2)",
     "python-dotenv (==1.1.1)",
-    "flet (==0.28.3)"
+    "flet (==0.28.3)",
+    "click (==8.3.1)"
 ]
 
 [tool.poetry]

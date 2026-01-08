@@ -62,8 +62,8 @@ class TelegramActions(AbstractPlatform):
         if isinstance(self.__telegram_client, TelegramClient):
             result_parser = parse_telegram_url(url)
             return await self.__telegram_client.get_messages(
-                result_parser["chat_id"],
-                ids=result_parser["message_id"]
+                result_parser.chat_id,
+                ids=result_parser.message_id
             )
 
         raise Exception(f"self.__telegram_client is not instance of TelegramClient")
@@ -74,8 +74,8 @@ class TelegramActions(AbstractPlatform):
             result_parser = parse_telegram_url(url)
             log.info(f"Result parser: {result_parser}")
             message_response = await self.__telegram_client.get_messages(
-                result_parser["chat_id"],
-                ids=result_parser["message_id"]
+                result_parser.chat_id,
+                ids=result_parser.message_id
             )
             path_to_save = await self.__telegram_client.download_media(
                 message_response,
@@ -85,7 +85,7 @@ class TelegramActions(AbstractPlatform):
             if path_to_save is None:
                 path_to_save = await self.__telegram_client.download_media(
                     message_response,
-                    reply_to=result_parser["thread_id"],
+                    reply_to=result_parser.thread_id,
                     progress_callback=progress_callback
                 )
 

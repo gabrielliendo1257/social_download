@@ -2,7 +2,7 @@ import asyncio
 import logging
 from urllib.parse import urlparse
 
-from tm_downloader.domain.models.media import DownloaderStatus
+from tm_downloader.domain.models.media import DownloaderStatus, UrlTelegramParts, ChatType
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,64 +20,59 @@ async def monitor_tasks() -> None:
         await asyncio.sleep(4)
 
 
-def parse_telegram_url(url: str):
+def parse_telegram_url(url: str) -> UrlTelegramParts:
     parsed = urlparse(url)
     path_parts = [p for p in parsed.path.split("/") if p]
     print("Partes del path: ", path_parts)
 
     # Validar dominio
     if parsed.netloc not in ("t.me", "telegram.me", "www.t.me", "www.telegram.me"):
-        return None
+        raise Exception(f"Invalid netloc url: {parsed.netloc}")
 
     # Caso 1: enlace de invitación
     if path_parts and path_parts[0].startswith("+"):
-        return {
-            "chat_type": "invite",
-            "chat_id": None,
-            "thread_id": None,
-            "message_id": None,
-        }
+        return UrlTelegramParts(None, None, None, chat_type=ChatType.INVITE)
 
     # Caso 2: grupo/canal privado (t.me/c/CHAT_ID/MESSAGE_ID)
     if len(path_parts) == 3 and path_parts[0] == "c":
         username, thread_id, message_id = path_parts
-        return {
-            "chat_type": "private",
-            "chat_id": int("-100" + thread_id),
-            "thread_id": None,
-            "message_id": int(message_id),
-        }
+        return UrlTelegramParts(
+            chat_id=int("-100" + thread_id),
+            thread_id=None,
+            message_id=int(message_id),
+            chat_type=ChatType.PRIVATE
+        )
 
     # Caso 3: canal público con posible thread (t.me/username/thread/message)
     if len(path_parts) > 3 and path_parts[0] == "c":
         c, username, thread_id, message_id = path_parts
-        return {
-            "chat_type": "public_thread",
-            "chat_id": int("-100" + username),
-            "thread_id": int(thread_id),
-            "message_id": int(message_id),
-        }
+        return UrlTelegramParts(
+            chat_id=int("-100" + username),
+            thread_id=int(thread_id),
+            message_id=int(message_id),
+            chat_type=ChatType.PUBLIC_THREAD
+        )
 
     # Caso 4: canal público normal (t.me/username/message)
     if len(path_parts) == 2:
         username, message_id = path_parts
-        return {
-            "chat_type": "public",
-            "chat_id": username,
-            "thread_id": None,
-            "message_id": int(message_id),
-        }
+        return UrlTelegramParts(
+            chat_id=username,
+            thread_id=None,
+            message_id=int(message_id),
+            chat_type=ChatType.PUBLIC
+        )
 
     # Caso 5: perfil o canal sin mensaje (t.me/username)
     if len(path_parts) == 1:
-        return {
-            "chat_type": "profile",
-            "chat_id": path_parts[0],
-            "thread_id": None,
-            "message_id": None,
-        }
+        return UrlTelegramParts(
+            chat_id=path_parts[0],
+            thread_id=None,
+            message_id=None,
+            chat_type=ChatType.PROFILE
+        )
 
-    return None
+    raise Exception(f"Invalid telegram url: {url}")
 
 
 def default_progress_callback(current_template, current: int, total: int) -> None:

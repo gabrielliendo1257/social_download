@@ -56,9 +56,8 @@ class TelegramGetInformationFromUrlPattern(AsyncBaseUseCases):
         ids_message = split_url[-1].split("-")
         ids_start = int(ids_message[0])
         ids_end = int(ids_message[1])
-        #url_base = "/".join(split_url)
 
-        channel = parse_telegram_url(self.__url_pattern.split("-")[0])["chat_id"]
+        channel = parse_telegram_url(self.__url_pattern.split("-")[0]).chat_id
 
         return ids_start, ids_end, channel
 
@@ -99,4 +98,4 @@ class TelegramUseCases:
     download_media = TelegramVideoDownloader
     get_information_from_url_pattern = TelegramGetInformationFromUrlPattern
     save_on_personal_vault = SaveMessageOnPersonalVault # TODO
-    forward_message = ForwardMessage
+    forward_message = ForwardMessage # TODO
