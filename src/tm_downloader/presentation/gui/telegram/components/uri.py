@@ -99,6 +99,7 @@ class UriInformation(ft.Column):
         self.__status = status
 
     def progress_callback(self, current: int, total: int) -> None:
+        self.__status = DownloaderStatus.INITIALIZED
         async def update_ui():
             if current == total:
                 self.__status = DownloaderStatus.FINISHED

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 from typing import Callable, List
 
 from dotenv import load_dotenv
@@ -16,12 +17,15 @@ load_dotenv()
 
 api_id = os.getenv("API_ID")
 api_hash = os.getenv("API_HASH")
-telegram_session = os.getenv("TG_SESSION")
+telegram_session_name = os.getenv("TG_SESSION")
+telegram_session_dir = Path.home() / os.getenv("TG_SESSION_DIR")
+telegram_session_dir.mkdir(parents=True, exist_ok=True)
+
 
 log = logging.getLogger(__name__)
 
 
-def _parser_message(message: Message, url_base: str | None = None) -> MediaBase:
+def parser_message(message: Message, url_base: str | None = None) -> MediaBase:
     size = None
     if getattr(message, "video", None):
         size = message.video.size
@@ -51,10 +55,10 @@ class TelegramController:
     def __init__(self, event_bus: TelegramEventBus):
         self._telegram_use_cases = TelegramUseCases()
         self.__event_bus = event_bus
-        self.__loop_runner = AsyncLoopRunner()
-        self.loop = self.__loop_runner.loop
+        self.loop_runner = AsyncLoopRunner()
+        self.loop = self.loop_runner.loop
 
-        log.debug("LOOP: ", self.loop)
+        log.debug(f"LOOP: {self.loop}")
         self.__telegram_actions = None
 
         # asyncio.run_coroutine_threadsafe(
@@ -81,7 +85,7 @@ class TelegramController:
     ) -> None:
         try:
             client = TelegramClient(
-                "session",
+                str(telegram_session_dir / telegram_session_name),
                 int(api_id),
                 api_hash,
                 loop=self.loop
@@ -110,7 +114,7 @@ class TelegramController:
                 url_media=url_video,
                 telegram_actions=self.__telegram_actions
             ).execute()
-            return _parser_message(message, url_video)
+            return parser_message(message, url_video)
 
         def done(f):
             result = f.result()
@@ -135,10 +139,15 @@ class TelegramController:
 
         medias = []
         for message in future_messages.result():
-            media = _parser_message(message=message, url_base=url_base)
+            media = parser_message(message=message, url_base=url_base)
             medias.append(media)
 
         return medias
+
+    def download_media_from_url_pattern(self, url_pattern):
+        asyncio.run_coroutine_threadsafe(
+        )
+        ...
 
     # TODO Metodo de reenvio a los mensages personales
     def save_message_on_personal_vault(self):

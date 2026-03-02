@@ -2,10 +2,10 @@ import asyncio
 import logging
 from urllib.parse import urlparse
 
-from tm_downloader.domain.models.media import DownloaderStatus, UrlTelegramParts, ChatType
+from tm_downloader.domain.models.media import UrlTelegramParts, ChatType
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.ERROR,
     format="%(asctime)s,%(msecs)d %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
@@ -17,7 +17,7 @@ async def monitor_tasks() -> None:
         print(f"Tareas activas: {len(tasks)}")
         for t in tasks:
             print(f" - {t.get_coro().__name__} -> {t._state}")
-        await asyncio.sleep(4)
+        await asyncio.sleep(1)
 
 
 def parse_telegram_url(url: str) -> UrlTelegramParts:
@@ -74,12 +74,16 @@ def parse_telegram_url(url: str) -> UrlTelegramParts:
 
     raise Exception(f"Invalid telegram url: {url}")
 
+def parse_url_from_pattern(url: str):
+    """
+    Return ids_start, ids_end, channel
+    """
+    split_url = url.split("/")
 
-def default_progress_callback(current_template, current: int, total: int) -> None:
-    if current == total:
-        current_template.status = DownloaderStatus.FINISHED
+    ids_message = split_url[-1].split("-")
+    ids_start = int(ids_message[0])
+    ids_end = int(ids_message[1])
 
-    current = current / total
-    current_template.pb.value = current
+    channel = parse_telegram_url(url.split("-")[0]).chat_id
 
-    current_template.update()
+    return ids_start, ids_end, channel

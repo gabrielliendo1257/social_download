@@ -2,7 +2,7 @@ import asyncio
 import threading
 from dataclasses import dataclass
 from enum import Enum
-from urllib.parse import urlparse
+from uuid import UUID
 
 
 class DownloaderStatus(Enum):
@@ -22,6 +22,10 @@ class ChatType(Enum):
     PROFILE = 5
 
 
+class Download:
+    id: UUID
+
+
 class MediaBase:
     def __init__(self, uri, id, date, size, caption):
         self.uri = uri
@@ -37,6 +41,9 @@ class MediaBase:
     @caption.setter
     def caption(self, value):
         self.__aption = value
+
+    def __str__(self):
+        return "url: " + str(self.uri) + ", date: " + str(self.date)
 
 
 @dataclass
