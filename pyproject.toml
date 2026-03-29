@@ -23,5 +23,13 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [project.scripts]
-tgcli = "tm_downloader.presentation.cli.cli_main:initializer_cli"
-tggui = "tm_downloader.presentation.gui.guimain:main"
+tgcli = "tm_downloader.ui.cli.cli_main:initializer_cli"
+tggui = "tm_downloader.ui.gui.guimain:main"
+
+[dependency-groups]
+dev = [
+    "pytest (==9.0.2)",
+    "ruff (==0.15.6)",
+    "black (==26.3.1)",
+    "basedpyright (==1.38.2)"
+]
