@@ -4,6 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
 
 load_dotenv()
 
@@ -47,7 +48,15 @@ class AuthManager:
             is_authenticated = await self.authentorize()
 
             if not is_authenticated:
-                raise Exception("Authentication failed")
+                phone = input("Enter phone number: ")
+                await self.__client.send_code_request(phone)
+                code = input("Enter code: ")
+
+                try:
+                    await self.__client.sign_in(phone=phone, code=code)
+                except SessionPasswordNeededError as ex:
+                    password = input("Enter 2fa code: ")
+                    await self.__client.sign_in(password=password)
 
             return self.__client
         except Exception as ex:
