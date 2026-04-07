@@ -42,7 +42,7 @@ class DownloadController:
         return parser_result
 
     @resolve_context
-    async def request_information_new(
+    async def request_information(
         self,
         ctx: ContextPlatform | None = None,
         url: str | None = None,
@@ -55,7 +55,7 @@ class DownloadController:
         )
 
     @resolve_context
-    async def download_new(
+    async def download(
         self,
         ctx: ContextPlatform | None = None,
         item: DownloadItem | None = None,
@@ -66,39 +66,6 @@ class DownloadController:
         assert ctx is not None, "context is None"
         assert ctx.service is not None, "service is None"
         return await ctx.service.download(item, *args, **kwargs)
-
-    def _on_message_downloaded(self, future: Future[Any]) -> object:
-        path_saved = future.result()
-        logging.info(f"Path downloaded -> {path_saved}")
-
-    def _on_information_requested_future(self, future: Future[Any]) -> object:
-        message = future.result()
-
-        if self.__ui is None:
-            raise Exception("Not ui set.")
-
-        self._on_information_requested_message(message)
-
-    def _on_information_requested_message(self, item):
-        assert isinstance(
-            self.__ui, AbstractUI
-        ), f"Ui not is instance TelegramGui, self.__ui is {self.__ui}"
-
-        if not item.file:
-            logging.warning(f"Item not is file.")
-            self.__ui.clean_url_component()
-            return
-
-        assert isinstance(
-            item, Message
-        ), f"item not instance of Message, item is {item}"
-
-        self.__ui.show_new_url_component(item)
-
-    def _on_message_range_downloaded(self, **kwargs):
-        logging.info(f"Result range downloaded: {kwargs}")
-        assert self.__ui is not None, "self.__ui is None"
-        self.__ui.change_state_url_component(**kwargs)
 
 
 if __name__ == "__main__":
@@ -124,19 +91,19 @@ if __name__ == "__main__":
             )
             assert urls_expanded is not None
             return [
-                asyncio.create_task(download_controller.request_information_new(url))
+                asyncio.create_task(download_controller.request_information(url))
                 for url in urls_expanded
             ]
 
         item = asyncio.run_coroutine_threadsafe(
-            download_controller.request_information_new(
+            download_controller.request_information(
                 url="https://t.me/c/2066575278/7143"
             ),
             loop=app_bootstrap.loop,
         ).result()
         logging.info(f"DownloadItem result: {item}")
         path_saved = asyncio.run_coroutine_threadsafe(
-            download_controller.download_new(item=item), loop=app_bootstrap.loop
+            download_controller.download(item=item), loop=app_bootstrap.loop
         ).result()
         logging.info(f"Path saved: {path_saved}")
     except Exception as ex:

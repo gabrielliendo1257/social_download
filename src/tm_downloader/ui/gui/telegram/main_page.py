@@ -16,11 +16,11 @@ from tm_downloader.ui.controller import (
     DownloadController,
 )
 from tm_downloader.ui.gui.telegram.components.file_picker import FilePickerComponent
-from tm_downloader.ui.gui.telegram.components.url import UrlCardStateView
+from tm_downloader.ui.gui.telegram.components.url import DownloadCardView
 
 
 class TelegramGui(ft.Column, AbstractUI):
-
+    """Management de componentes ui, dentro del contexto de telegram"""
     def __init__(self):
         super().__init__()
         self.download_controller = None
@@ -130,7 +130,7 @@ class TelegramGui(ft.Column, AbstractUI):
 
     def show_new_url_component(self, download_item: DownloadItem):
         assert self.download_controller is not None, "Controller is None"
-        url_information_view = UrlCardStateView(download_item, self.download_controller)
+        url_information_view = DownloadCardView(download_item, self.download_controller)
         self.video_queue.controls.append(url_information_view)
         self.add_type_url_component.value = ""
         self.update()
@@ -166,7 +166,7 @@ class TelegramGui(ft.Column, AbstractUI):
 
         async def action():
             try:
-                future_result = await self.download_controller.request_information_new(
+                future_result = await self.download_controller.request_information(
                     url=url_value
                 )
             except Exception as ex:
