@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+from typing import Callable
 
 import flet as ft
 from flet.core.types import FontWeight
@@ -11,11 +11,12 @@ from tm_downloader.domain.model import (
     DownloadItem,
     MessageViewModel,
     DownloadJob,
+    DownloadState,
 )
 from tm_downloader.ui.controller import DownloadController
 
 
-class DownloadCardView(ft.Column):
+class DownloadCardView(ft.Container):
 
     def __init__(
         self,
@@ -25,34 +26,32 @@ class DownloadCardView(ft.Column):
         super().__init__()
         self.__telegram_component = telegram_component
         self.download_item = download_item
+        self._context = None
+
         self.key = download_item.job.id_job
+
         self.__size: int | str = (
             f"{round(download_item.data.size / 1024 / 1024, 2)} MB"
             if not download_item.data.size is None
             else "No size"
         )
 
-        self.download_state: BaseDownloadStateView = None
-
-        self.url_information = DownloadInformationView(
-            self.download_item,
+        self.download_idle_view = DownloadIdleView(
+            file_type="Document",
+            item_information=self.download_item,
             telegram_component=self.__telegram_component,
-            container_view=self,
+            view_context=self,
         )
-        self.download_process = DownloadProcessingView(
-            self.download_item, telegram_component=self.__telegram_component
-        )
-        self.download_completed_view = DownloadCompletedView(
-            file_name=self.download_item.data.url,
-            file_size=self.download_item.data.size,
-            telegram_component=self.__telegram_component,
-        )
+        self.download_state = self.download_idle_view
+        self.content = self.download_state
 
-        self.controls = [
-            self.url_information,
-            self.download_process,
-            self.download_completed_view,
-        ]
+    @property
+    def context(self):
+        return self._context
+
+    @context.setter
+    def context(self, value):
+        self._context = value
 
     @property
     def media(self) -> DownloadItem:
@@ -60,66 +59,96 @@ class DownloadCardView(ft.Column):
 
     def change_state(self, state: BaseDownloadStateView):
         self.download_state = state
+        self.download_state.context = self
+        self.content = state
+        from tm_downloader.ui.gui.telegram.main_page import TelegramGui
 
-    def progress_callback(self, current: int, total: int) -> None:
-        if current == total:
-            self.show_download_state_finished()
-        else:
-            self.pb.value = current / total
-            self.update()
+        assert isinstance(self._context, TelegramGui), "_context is not TelegramGui"
+        state.show()  # Action service
+        self._context.update()
 
-    def show_download_state_finished(self):
-        self.download_completed_view.visible = True
-        self.download_process.visible = False
-        self.url_information.visible = False
-
-        self.update()
-
-    def click_download(self, e):
-        self.url_information.visible = False
-        self.download_completed_view.visible = False
-        self.download_process.visible = True
-
-        url = self.url_text.value
-        if url is None:
-            logging.error("url value is None")
-            return
-
+    def click_download(
+        self, item_information: DownloadItem, progress_callback: Callable
+    ):
+        assert isinstance(self.download_state, DownloadProcessingViewNew) or isinstance(
+            self.download_state, DownloadProcessingView
+        ), "Download state is not a DownloadProcessingView"
         asyncio.run_coroutine_threadsafe(
             self.__telegram_component.download(
-                item=self.download_item, progress_callback=self.progress_callback
+                item=item_information,
+                progress_callback=progress_callback,
             ),
             loop=AppContext.loop,
         )
 
-        self.update()
-
     def cancel_download_clicked(self, e):
         pass
 
+    def close_card_view(self, e):
+        self.content = None
+        self.update()
+        self._context.update()
+
 
 class BaseDownloadStateView(ft.Container):
+    """Configuracion base para componentes de url"""
 
-    def __init__(self): ...
-
-
-class DownloadRequestingView(ft.Container, BaseDownloadStateView):
-    def __init__(self, url: str):
+    def __init__(self):
         super().__init__()
-
-        self.url = url
-
+        self.state: DownloadState = DownloadState.FAILED
         self.padding = 20
         self.border_radius = 20
         self.bgcolor = "#0b0f10"
+        self.margin = ft.Margin(top=0, bottom=10, right=0, left=0)
+        self._context = None
 
-        # Glow sutil amarillo (requesting)
-        # self.shadow = ft.BoxShadow(
-        #     blur_radius=30,
-        #     spread_radius=1,
-        #     color="#FFC10733"  # amber glow
-        # )
+    def show(self): ...
 
+    @property
+    def context(self) -> DownloadCardView:
+        return self._context
+
+    @context.setter
+    def context(self, value):
+        self._context = value
+
+    async def click_cancel(self, e): ...
+
+    async def click_delete_view(self, e):
+        assert isinstance(self._context, DownloadCardView)
+        self._context.close_card_view()
+
+    async def click_paused(self, e): ...
+
+    async def click_retrie(self, e): ...
+
+    async def click_open_source(self, e): ...
+
+    async def click_view_message(self): ...
+
+
+class DownloadRequestingView(BaseDownloadStateView):
+    def __init__(
+        self,
+        item_information: DownloadItem | None = None,
+        telegram_component: DownloadController | None = None,
+    ):
+        super().__init__()
+        self.state: DownloadState = DownloadState.PROCESSING
+        self.__telegram_component = telegram_component
+        self.item_information = item_information
+        self.url = item_information.data.url
+
+        self.progress = ft.ProgressBar(
+            value=None,  # <- clave: indeterminado
+            color=ft.Colors.AMBER_400,
+            bgcolor="#1a1f21",
+        )
+        self.request_info = ft.Text(
+            "Solicitando información...",
+            size=12,
+            color=ft.Colors.GREY_400,
+        )
         self.content = ft.Column(
             controls=[
                 # URL (igual que tus cards)
@@ -127,11 +156,7 @@ class DownloadRequestingView(ft.Container, BaseDownloadStateView):
                     self.url, size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE
                 ),
                 # Barra indeterminada (REQUESTING)
-                ft.ProgressBar(
-                    value=None,  # <- clave: indeterminado
-                    color=ft.Colors.AMBER_400,
-                    bgcolor="#1a1f21",
-                ),
+                self.progress,
                 # Estado + acciones
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -140,11 +165,7 @@ class DownloadRequestingView(ft.Container, BaseDownloadStateView):
                             spacing=10,
                             controls=[
                                 ft.Icon(ft.Icons.CLOUD_SYNC, color=ft.Colors.AMBER_400),
-                                ft.Text(
-                                    "Solicitando información...",
-                                    size=12,
-                                    color=ft.Colors.GREY_400,
-                                ),
+                                self.request_info,
                             ],
                         ),
                         # acciones (cancelar request)
@@ -159,114 +180,101 @@ class DownloadRequestingView(ft.Container, BaseDownloadStateView):
             spacing=15,
         )
 
+    async def click_cancel(self, e): ...
 
-class DownloadInformationView(ft.Container, BaseDownloadStateView):
+
+class DownloadProcessingViewNew(BaseDownloadStateView):
+
     def __init__(
         self,
         item_information: DownloadItem,
         telegram_component: DownloadController | None = None,
-        container_view: DownloadCardView | None = None,
     ):
         super().__init__()
         self.__telegram_component = telegram_component
-        self.__item_information = item_information
-        self.__container_view = container_view
+        self.item_information = item_information
+        self.url = item_information.data.url
 
-        self.visible = True
-        self.padding = 40
-        self.margin = ft.Margin(top=0, bottom=10, right=0, left=0)
-        self.border_radius = 20
-        self.bgcolor = "#0b0f10"
-        # self.shadow = ft.BoxShadow(
-        #     blur_radius=10, spread_radius=2, color="rgba(0,0,0,0.15)"
-        # )
-
-        self.url_text = ft.Text(
-            item_information.data.url, size=14, color=ft.Colors.BLUE_400
+        self.progress = ft.ProgressBar(
+            value=None,
+            color=ft.Colors.AMBER_400,
+            bgcolor="#1a1f21",
         )
-        self.size: str = (
-            f"{round(item_information.data.size / 1024 / 1024, 2)} MB"
-            if not item_information.data.size is None
-            else "No size"
+        self.request_info = ft.Text(
+            "Descargando...",
+            size=12,
+            color=ft.Colors.GREY_400,
         )
         self.content = ft.Column(
-            spacing=5,
             controls=[
-                ft.Text(item_information.data.url, size=16, weight=FontWeight.BOLD),
-                self.url_text,
+                ft.Text(
+                    self.url, size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE
+                ),
+                self.progress,
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     controls=[
-                        ft.Text(
-                            str(item_information.data.date),
-                            size=13,
-                            color=ft.Colors.GREY_600,
-                        ),
-                        ft.Text(self.size, size=13, color=ft.Colors.GREY_600),
-                    ],
-                ),
-                ft.Row(
-                    alignment=ft.MainAxisAlignment.END,
-                    controls=[
-                        ft.IconButton(
-                            icon=ft.Icons.CREATE_OUTLINED,
-                            tooltip="Editar",
+                        ft.Row(
+                            spacing=10,
+                            controls=[
+                                ft.Icon(ft.Icons.CLOUD_SYNC, color=ft.Colors.AMBER_400),
+                                self.request_info,
+                            ],
                         ),
                         ft.IconButton(
-                            icon=ft.Icons.DELETE_OUTLINE,
-                            tooltip="Eliminar",
-                            icon_color=ft.Colors.RED,
+                            icon=ft.Icons.PAUSE,
+                            icon_color=ft.Colors.GREEN_400,
+                            tooltip="Pausar",
                         ),
                         ft.IconButton(
-                            icon=ft.Icons.DOWNLOAD,
-                            tooltip="Descargar",
-                            on_click=self.click_download,
+                            icon=ft.Icons.CLOSE,
+                            icon_color=ft.Colors.RED_400,
+                            tooltip="Cancelar",
                         ),
                     ],
                 ),
             ],
+            spacing=15,
         )
 
-    async def click_download(self, e):
-        assert self.__container_view is not None, ""
-        self.__container_view.click_download(e)
+    def progress_callback(self, current: int, total: int) -> None:
+        if current == total:
+            self._context.change_state(
+                state=DownloadCompletedViewNew(
+                    item_information=self.item_information,
+                    telegram_component=self.__telegram_component,
+                )
+            )
+        else:
+            self.progress.value = current / total
+            self.update()
 
-        url = self.url_text.value
-        if url is None:
-            logging.error("url value is None")
-            return
-
-        asyncio.run_coroutine_threadsafe(
-            self.__telegram_component.download(
-                item=self.download_item, progress_callback=self.progress_callback
-            ),
-            loop=AppContext.loop,
+    def show(self):
+        self._context.click_download(
+            item_information=self.item_information,
+            progress_callback=self.progress_callback,
         )
 
-        self.update()
 
-
-class DownloadProcessingView(ft.Container, BaseDownloadStateView):
+class DownloadProcessingView(BaseDownloadStateView):
 
     def __init__(
         self,
         item_information: DownloadItem,
         telegram_component: DownloadController | None = None,
-        container_view: DownloadCardView | None = None,
     ):
         super().__init__()
-        self.visible = False
-        self.padding = 40
-        self.margin = ft.Margin(top=0, bottom=10, right=0, left=0)
-        self.border_radius = 20
-        self.bgcolor = "#0b0f10"
-        # self.shadow = ft.BoxShadow(
-        #     blur_radius=10, spread_radius=2, color="rgba(0,0,0,0.15)"
-        # )
+        self.state = DownloadState.PROCESSING
+
+        self.item_information = item_information
+        self.__telegram_component = telegram_component
+
+        self.url = item_information.data.url
+
         self.pb = ft.ProgressBar(width=500)
         self.content = ft.Column(
             controls=[
-                ft.Text(item_information.data.url, size=16, weight=FontWeight.BOLD),
+                ft.Text(self.url, size=16, weight=FontWeight.BOLD),
                 self.pb,
                 ft.Row(
                     alignment=ft.MainAxisAlignment.END,
@@ -278,117 +286,42 @@ class DownloadProcessingView(ft.Container, BaseDownloadStateView):
                         ft.IconButton(
                             icon=ft.Icons.CANCEL,
                             tooltip="Cancel",
-                            on_click=self.cancel_download_clicked,
+                            on_click=self.click_cancel,
                         ),
                     ],
                 ),
             ],
         )
 
-    def cancel_download_clicked(self, e): ...
+    def progress_callback(self, current: int, total: int) -> None:
+        if current == total:
+            self._context.change_state(
+                state=DownloadCompletedViewNew(
+                    item_information=self.item_information,
+                    telegram_component=self.__telegram_component,
+                )
+            )
+        else:
+            self.pb.value = current / total
+            self.update()
 
+    async def click_cancel(self, e): ...
 
-class DownloadCompletedView(ft.Container, BaseDownloadStateView):
+    async def click_paused(self, e): ...
 
-    def __init__(
-        self,
-        telegram_component: DownloadController | None = None,
-        container_view: DownloadCardView | None = None,
-        file_name: str = None,
-        file_size: str = None,
-        on_close=None,
-        on_open=None,
-    ):
-        super().__init__()
-
-        self.__telegram_component = telegram_component
-        self.__container_view = container_view
-        self.file_name = file_name
-        self.file_size = file_size
-        self.on_close = on_close
-        self.on_open = on_open
-
-        self.padding = 40
-        self.margin = ft.Margin(top=0, bottom=10, right=0, left=0)
-        self.border_radius = 20
-        self.bgcolor = "#0b0f10"
-
-        self.alignment = ft.alignment.center
-        self.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-        self.spacing = 20
-        self.visible = False
-
-        # Icono grande de éxito
-        icon = ft.Icon(name=ft.Icons.CHECK_CIRCLE_OUTLINED, color="green", size=80)
-
-        # Título principal
-        title = ft.Text(
-            "Descarga completada",
-            size=24,
-            weight=ft.FontWeight.BOLD,
-            color="green",
+    def show(self):
+        self._context.click_download(
+            item_information=self.item_information,
+            progress_callback=self.progress_callback,
         )
 
-        # Detalles del archivo descargado
-        details = ft.Column(
-            controls=[
-                ft.Text(f"Archivo: {self.file_name}", size=16),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-        )
 
-        # Botones de acción
-        buttons = ft.Column(
-            alignment=ft.MainAxisAlignment.CENTER,
-            spacing=20,
-            controls=[
-                ft.ElevatedButton(
-                    text="Abrir archivo",
-                    icon=ft.Icons.FOLDER_OPEN,
-                    on_click=self.on_open,
-                ),
-                ft.OutlinedButton(
-                    text="Cerrar",
-                    icon=ft.Icons.CLOSE,
-                    on_click=self.on_close_windows_finished,
-                ),
-            ],
-        )
-
-        # Decoración visual
-        self.content = ft.Row(
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            controls=[
-                ft.Row(
-                    controls=[
-                        icon,
-                        ft.Column(
-                            controls=[title, details],
-                            spacing=20,
-                            alignment=ft.MainAxisAlignment.CENTER,
-                        ),
-                    ]
-                ),
-                buttons,
-            ],
-        )
-
-    def on_close_windows_finished(self, event) -> None:
-        self.visible = False
-
-        self.update()
-
-
-class DownloadFailedView(ft.Container):
+class DownloadFailedView(BaseDownloadStateView):
     def __init__(self, url: str, error_message: str = "Error en la descarga"):
         super().__init__()
-
+        self.state = DownloadState.FAILED
         self.url = url
         self.error_message = error_message
-
-        self.padding = 20
-        self.border_radius = 20
-        self.bgcolor = "#0b0f10"
 
         # Glow rojo (estado de error)
         self.shadow = ft.BoxShadow(blur_radius=30, spread_radius=1, color="#ff525233")
@@ -438,17 +371,16 @@ class DownloadFailedView(ft.Container):
             ],
         )
 
+    async def click_delete_view(self, e): ...
 
-class DownloadCanceledView(ft.Container):
+    async def click_retrie(self, e): ...
+
+
+class DownloadCanceledView(BaseDownloadStateView):
     def __init__(self, url: str):
         super().__init__()
-
+        self.state = DownloadState.CANCELLED
         self.url = url
-
-        self.padding = 20
-        self.border_radius = 20
-        self.bgcolor = "#0b0f10"
-
         # Glow gris (estado neutral / detenido)
         self.shadow = ft.BoxShadow(blur_radius=30, spread_radius=1, color="#9e9e9e33")
 
@@ -486,34 +418,32 @@ class DownloadCanceledView(ft.Container):
             ],
         )
 
-class DownloadCompletedViewNew(ft.Container):
-    def __init__(self, url: str):
+    async def click_retrie(self, e): ...
+
+    async def click_delete_view(self, e): ...
+
+
+class DownloadCompletedViewNew(BaseDownloadStateView):
+    def __init__(
+        self,
+        item_information: DownloadItem | None = None,
+        telegram_component: DownloadController | None = None,
+    ):
         super().__init__()
-
-        self.url = url
-
-        self.padding = 20
-        self.border_radius = 20
-        self.bgcolor = "#0b0f10"
+        self.state = DownloadState.COMPLETED
+        self.__telegram_component = telegram_component
+        self.url = item_information.data.url
 
         # Glow verde (éxito)
-        self.shadow = ft.BoxShadow(
-            blur_radius=30,
-            spread_radius=1,
-            color="#4caf5033"
-        )
+        self.shadow = ft.BoxShadow(blur_radius=30, spread_radius=1, color="#4caf5033")
 
         self.content = ft.Column(
             spacing=15,
             controls=[
                 # URL
                 ft.Text(
-                    self.url,
-                    size=16,
-                    weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.WHITE
+                    self.url, size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE
                 ),
-
                 # Estado completado
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -523,75 +453,72 @@ class DownloadCompletedViewNew(ft.Container):
                             spacing=10,
                             controls=[
                                 ft.Icon(
-                                    ft.Icons.CHECK_CIRCLE,
-                                    color=ft.Colors.GREEN_400
+                                    ft.Icons.CHECK_CIRCLE, color=ft.Colors.GREEN_400
                                 ),
                                 ft.Text(
                                     "Descarga completada",
                                     size=12,
-                                    color=ft.Colors.GREY_400
+                                    color=ft.Colors.GREY_400,
                                 ),
-                            ]
+                            ],
                         ),
-
                         # Acción principal
                         ft.TextButton(
-                            "Abrir",
-                            style=ft.ButtonStyle(
-                                color=ft.Colors.GREEN_200
-                            )
-                        )
-                    ]
-                )
-            ]
+                            "Abrir", style=ft.ButtonStyle(color=ft.Colors.GREEN_200)
+                        ),
+                    ],
+                ),
+            ],
         )
 
-class DownloadIdleView(ft.Container):
+    async def click_delete_view(self, e):
+        isinstance(self._context, DownloadCardView)
+        self._context.close_card_view()
+
+    async def click_open_source(self, e): ...
+
+
+class DownloadIdleView(BaseDownloadStateView):
     def __init__(
         self,
-        url: str,
         title: str = "Contenido disponible",
-        file_size: str = "—",
         file_type: str = "—",
-        message_preview: str = "Sin descripción"
+        message_preview: str = "Sin descripción",
+        item_information: DownloadItem | None = None,
+        telegram_component: DownloadController | None = None,
+        view_context: DownloadCardView | None = None,
     ):
         super().__init__()
+        self.state = DownloadState.IDLE
+        self.__telegram_component = telegram_component
+        self.item_information = item_information
+        self.view_context = view_context
 
-        self.url = url
+        self.url = item_information.data.url
         self.title = title
-        self.file_size = file_size
+        self.file_size = (
+            f"{round(item_information.data.size / 1024 / 1024, 2)} MB"
+            if not item_information.data.size is None
+            else "No size"
+        )
         self.file_type = file_type
         self.message_preview = message_preview
 
-        self.padding = 20
-        self.border_radius = 20
-        self.bgcolor = "#0b0f10"
-
         # Glow azul (estado listo)
-        self.shadow = ft.BoxShadow(
-            blur_radius=30,
-            spread_radius=1,
-            color="#2196f333"
-        )
+        self.shadow = ft.BoxShadow(blur_radius=30, spread_radius=1, color="#2196f333")
 
         self.content = ft.Column(
             spacing=15,
             controls=[
                 # URL
-                ft.Text(
-                    self.url,
-                    size=14,
-                    color=ft.Colors.GREY_400
-                ),
-
+                ft.Text(self.url, size=14, color=ft.Colors.GREY_400),
                 # Título / nombre del contenido
                 ft.Text(
                     self.title,
                     size=16,
                     weight=ft.FontWeight.BOLD,
-                    color=ft.Colors.WHITE
+                    color=ft.Colors.WHITE,
                 ),
-
                 # Metadata (más info útil)
                 ft.Row(
                     spacing=20,
@@ -599,29 +526,39 @@ class DownloadIdleView(ft.Container):
                         ft.Row(
                             spacing=5,
                             controls=[
-                                ft.Icon(ft.Icons.INSERT_DRIVE_FILE, size=16, color=ft.Colors.BLUE_300),
-                                ft.Text(self.file_type, size=11, color=ft.Colors.GREY_400),
-                            ]
+                                ft.Icon(
+                                    ft.Icons.INSERT_DRIVE_FILE,
+                                    size=16,
+                                    color=ft.Colors.BLUE_300,
+                                ),
+                                ft.Text(
+                                    self.file_type, size=11, color=ft.Colors.GREY_400
+                                ),
+                            ],
                         ),
                         ft.Row(
                             spacing=5,
                             controls=[
-                                ft.Icon(ft.Icons.DATA_USAGE, size=16, color=ft.Colors.BLUE_300),
-                                ft.Text(self.file_size, size=11, color=ft.Colors.GREY_400),
-                            ]
+                                ft.Icon(
+                                    ft.Icons.DATA_USAGE,
+                                    size=16,
+                                    color=ft.Colors.BLUE_300,
+                                ),
+                                ft.Text(
+                                    self.file_size, size=11, color=ft.Colors.GREY_400
+                                ),
+                            ],
                         ),
-                    ]
+                    ],
                 ),
-
                 # Preview del mensaje (recortado)
                 ft.Text(
                     self.message_preview,
                     size=12,
                     color=ft.Colors.GREY_500,
                     max_lines=2,
-                    overflow=ft.TextOverflow.ELLIPSIS
+                    overflow=ft.TextOverflow.ELLIPSIS,
                 ),
-
                 # Acciones
                 ft.Row(
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -630,18 +567,14 @@ class DownloadIdleView(ft.Container):
                         ft.Row(
                             spacing=10,
                             controls=[
-                                ft.Icon(
-                                    ft.Icons.START,
-                                    color=ft.Colors.BLUE_400
-                                ),
+                                ft.Icon(ft.Icons.START, color=ft.Colors.BLUE_400),
                                 ft.Text(
                                     "Listo para descargar",
                                     size=12,
-                                    color=ft.Colors.GREY_400
+                                    color=ft.Colors.GREY_400,
                                 ),
-                            ]
+                            ],
                         ),
-
                         # Botones de acción
                         ft.Row(
                             spacing=5,
@@ -649,29 +582,43 @@ class DownloadIdleView(ft.Container):
                                 ft.IconButton(
                                     icon=ft.Icons.PLAY_ARROW,
                                     icon_color=ft.Colors.BLUE_400,
-                                    tooltip="Descargar"
+                                    tooltip="Descargar",
+                                    on_click=self.click_download,
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.VISIBILITY,
                                     icon_color=ft.Colors.GREY_400,
-                                    tooltip="Ver mensaje completo"
+                                    tooltip="Ver mensaje completo",
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.CLOSE,
                                     icon_color=ft.Colors.RED_400,
-                                    tooltip="Cancelar"
+                                    tooltip="Cancelar",
                                 ),
                                 ft.IconButton(
                                     icon=ft.Icons.DELETE,
                                     icon_color=ft.Colors.RED_400,
-                                    tooltip="Eliminar"
+                                    tooltip="Eliminar",
+                                    on_click=self.view_context.close_card_view,
                                 ),
-                            ]
-                        )
-                    ]
-                )
-            ]
+                            ],
+                        ),
+                    ],
+                ),
+            ],
         )
+
+    async def click_download(self, e):
+        process_view = DownloadProcessingViewNew(
+            item_information=self.item_information,
+            telegram_component=self.__telegram_component,
+        )
+        self.view_context.change_state(state=process_view)
+
+    async def click_cancel(self, e): ...
+
+    async def click_view_message(self): ...
+
 
 if __name__ == "__main__":
     import datetime
@@ -696,25 +643,18 @@ if __name__ == "__main__":
             message=None,
         )
 
-        download_requesting_view = DownloadRequestingView("https://telegram.org/")
+        download_requesting_view = DownloadRequestingView(item_information=item)
         download_failed_view = DownloadFailedView("https://telegram.org/")
         download_canceled_view = DownloadCanceledView("https://telegram.org/")
-        download_completed_view_new = DownloadCompletedViewNew("https://telegram.org/")
-        download_idle_view = DownloadIdleView("https://telegram.org/", file_type="Document", file_size="1.2G")
+        download_completed_view_new = DownloadCompletedViewNew(item_information=item)
+        download_idle_view = DownloadIdleView(item_information=item)
 
-        download_information_view = DownloadInformationView(item_information=item)
         download_processing_view = DownloadProcessingView(item_information=item)
         download_processing_view.visible = True
-        download_finished_view = DownloadCompletedView(
-            file_name="download_completed.txt", file_size="1.2Mb"
-        )
-        download_finished_view.visible = True
 
         main_page = ft.Column(
             controls=[
-                download_information_view,
                 download_processing_view,
-                download_finished_view,
                 download_requesting_view,
                 download_failed_view,
                 download_canceled_view,

@@ -25,7 +25,7 @@ class MessageViewModel:
 
 class AbstractUI:
 
-    def show_new_url_component(self, message):
+    def append_download_component(self, message):
         pass
 
     def clean_url_component(self):

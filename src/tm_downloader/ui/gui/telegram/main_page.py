@@ -16,11 +16,14 @@ from tm_downloader.ui.controller import (
     DownloadController,
 )
 from tm_downloader.ui.gui.telegram.components.file_picker import FilePickerComponent
-from tm_downloader.ui.gui.telegram.components.url import DownloadCardView
-
+from tm_downloader.ui.gui.telegram.components.url import (
+    DownloadCardView,
+    DownloadIdleView,
+)
 
 class TelegramGui(ft.Column, AbstractUI):
     """Management de componentes ui, dentro del contexto de telegram"""
+
     def __init__(self):
         super().__init__()
         self.download_controller = None
@@ -128,9 +131,13 @@ class TelegramGui(ft.Column, AbstractUI):
     def will_unmount(self):
         print("Called will_unmount")
 
-    def show_new_url_component(self, download_item: DownloadItem):
+    def append_download_component(self, download_item: DownloadItem):
         assert self.download_controller is not None, "Controller is None"
-        url_information_view = DownloadCardView(download_item, self.download_controller)
+        url_information_view = DownloadCardView(
+            download_item=download_item,
+            telegram_component=self.download_controller,
+        )
+        url_information_view.context = self
         self.video_queue.controls.append(url_information_view)
         self.add_type_url_component.value = ""
         self.update()
@@ -178,9 +185,10 @@ class TelegramGui(ft.Column, AbstractUI):
             if hasattr(future_result, "__aiter__"):
                 async for item in future_result:
                     assert isinstance(item, DownloadItem)
-                    self.show_new_url_component(item)
+                    self.append_download_component(item)
             else:
+                print("DownloadItem: ", future_result)
                 assert isinstance(future_result, DownloadItem)
-                self.show_new_url_component(future_result)
+                self.append_download_component(future_result)
 
         asyncio.run_coroutine_threadsafe(action(), loop=AppContext.loop).result()
