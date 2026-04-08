@@ -24,7 +24,7 @@ class DownloadManager:
 
     def crete_job(self, url: str) -> DownloadJob:
         job = DownloadJob(url, str(uuid.uuid4()))
-        self.jobs[job.id_job:job] = job
+        self.jobs[job.id_job] = job
 
         return job
 

@@ -44,6 +44,11 @@ telegram_patterns = [
     (LinkType.RANGE, re.compile(r"^https://t\.me/\+([A-Za-z0-9_-]+)(?:-(\d+))?$")),
     (LinkType.PROFILE, re.compile(r"^https://t\.me/([a-zA-Z0-9_]{5,32})$")),
     (LinkType.RANGE, re.compile(r"^https://t\.me/([a-zA-Z0-9_]{5,32})(?:-(\d+))?$")),
+    (LinkType.PRIVATE_THREAD, re.compile(r"^https://t\.me/c/(\d+)/(\d+)/(\d+)$")),
+    (
+        LinkType.RANGE,
+        re.compile(r"^https://t\.me/c/(\d+)/(\d+)/(\d+)(?:-(\d+))?$"),
+    ),
 ]
 
 
@@ -59,6 +64,7 @@ def parse_telegram_url(url: str):
         if m:
             return ParserResult(link_type, m.groups())
     return None
+
 
 def expand_range_url(url: str) -> list[str]:
     match = re.match(r"(https://t\.me/(?:c/)?[^/]+/)(\d+)-(\d+)$", url)
@@ -77,9 +83,8 @@ def expand_range_url(url: str) -> list[str]:
     return [f"{base}{i}" for i in range(start, end + 1)]
 
 
-
 def expand_telegram_media_url(url: str):
-    
+
     if re.match(r"https://t\.me/\+", url):
         return None
 

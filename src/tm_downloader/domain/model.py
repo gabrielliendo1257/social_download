@@ -53,6 +53,7 @@ class LinkType(Enum):
     PUBLIC = 4
     PROFILE = 5
     RANGE = 6
+    PRIVATE_THREAD = 7
 
 
 class Client(Enum):
