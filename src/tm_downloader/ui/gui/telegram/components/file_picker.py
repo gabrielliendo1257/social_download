@@ -2,8 +2,10 @@ import flet as ft
 
 
 class FilePickerComponent(ft.Container):
-    def __init__(self):
+    def __init__(self, on_change=None):
         super().__init__()
+        self.on_change = on_change
+
         self.selected_path = ft.Text(
             value="No file selected",
             color=ft.Colors.GREY_400,
@@ -25,19 +27,20 @@ class FilePickerComponent(ft.Container):
 
         self.content = ft.Row(
             controls=[
-                self.button,
                 self.selected_path,
+                self.button,
+                self.file_picker,
             ]
         )
 
     def open_picker(self, e):
-        self.file_picker.pick_files(allow_multiple=False)
+        self.file_picker.get_directory_path()
 
     def on_file_selected(self, e: ft.FilePickerResultEvent):
-        if e.files:
-            path = e.files[0].path
-            self.selected_path.value = path
+        if e.path:
+            self.selected_path.value = e.path
             self.selected_path.color = ft.Colors.GREY_100
-        else:
-            self.selected_path.value = "No file selected"
-            self.selected_path.color = ft.Colors.GREY_400
+            self.update()
+
+            if self.on_change:
+                self.on_change(e.path)

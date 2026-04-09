@@ -1,9 +1,5 @@
 import asyncio
 import logging
-from concurrent.futures import Future
-from typing import Any
-
-from telethon.tl.types import Message
 
 from tm_downloader.domain.context import resolve_context
 from tm_downloader.domain.model import (
@@ -46,12 +42,13 @@ class DownloadController:
         self,
         ctx: ContextPlatform | None = None,
         url: str | None = None,
+        file_name: str | None = None,
     ):
         assert isinstance(url, str) and url != "", "url is empty or None"
         assert ctx is not None, "context is None"
         assert ctx.service is not None, "service is None"
         return await ctx.service.request_information(
-            self.download_manager.crete_job(url)
+            self.download_manager.crete_job(url), file=file_name
         )
 
     @resolve_context

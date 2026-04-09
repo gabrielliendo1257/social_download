@@ -12,15 +12,18 @@ from tm_downloader.domain.queue import DownloadQueue
 
 
 class MessageViewModel:
-    def __init__(self, url=None, date=None, size=None, id_message=None, peer_id=None):
+    def __init__(self, url=None, date=None, size=None, id_message=None, peer_id=None, file=None, message=None, filename=None):
         self.url = url
         self.date = date
         self.size = size
         self.id_message = id_message
         self.peer_id = peer_id
+        self.file = file
+        self.message = message
+        self.filename = filename
 
     def __str__(self) -> str:
-        return f"MessageViewModel(url={self.url}, data={self.date}, size={self.size}, id_message={self.id_message}, peer_id={self.peer_id})"
+        return f"MessageViewModel(url={self.url}, data={self.date}, size={self.size}, id_message={self.id_message}, peer_id={self.peer_id}, file={str(self.file)}, file_name={self.filename})"
 
 
 class AbstractUI:
@@ -67,7 +70,7 @@ class BaseService:
     async def download(self, item: DownloadItem, *args, **kwargs) -> str:
         raise NotImplementedError("download not implemented")
 
-    async def request_information(self, job: DownloadJob) -> DownloadItem:
+    async def request_information(self, job: DownloadJob, file=None) -> DownloadItem:
         raise NotImplementedError("request not implemented")
 
 

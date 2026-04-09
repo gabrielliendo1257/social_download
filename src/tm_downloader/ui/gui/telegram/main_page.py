@@ -29,8 +29,9 @@ class TelegramGui(ft.Column, AbstractUI):
         self.download_controller = None
 
         self.height = 600
+        self.file_selected = None
 
-        self.__file_picker = FilePickerComponent()
+        self.__file_picker = FilePickerComponent(on_change=self.set_file_selected)
         self.selected_path = ft.Text(
             "Ninguna carpeta seleccionada", size=13, color=ft.Colors.GREY_400
         )
@@ -55,6 +56,7 @@ class TelegramGui(ft.Column, AbstractUI):
                 ),
             )
         )
+        self._button_add_url_component.disabled = True
 
         # VIDEO QUEUE
         self.video_queue = ft.ListView(
@@ -67,11 +69,6 @@ class TelegramGui(ft.Column, AbstractUI):
                     controls=[
                         ft.Text("Videos en cola", size=16, weight=FontWeight.BOLD),
                         self.__file_picker,
-                        ft.IconButton(
-                            icon=ft.Icons.FOLDER_OPEN,
-                            tooltip="Carpeta de descargas",
-                            # on_click=self.choose_folder,
-                        ),
                     ],
                 ),
                 self.video_queue,
@@ -146,15 +143,9 @@ class TelegramGui(ft.Column, AbstractUI):
         self.add_type_url_component.value = ""
         self.update()
 
-    def _folder_selected(self, e: ft.FilePickerResultEvent):
-        if e.path:
-            self.selected_path.value = e.path
-            self.selected_path.color = ft.Colors.WHITE
-
-        else:
-            self.selected_path.value = "Ninguna carpeta seleccionada"
-            self.selected_path.color = ft.Colors.GREY_400
-
+    def set_file_selected(self, path: str):
+        self.file_selected = path
+        self._button_add_url_component.disabled = False
         self.update()
 
     async def click_add_url(self, e: ft.ControlEvent):
@@ -174,7 +165,7 @@ class TelegramGui(ft.Column, AbstractUI):
         async def action():
             try:
                 future_result = await self.download_controller.request_information(
-                    url=url_value
+                    url=url_value, file_name=self.file_selected
                 )
             except Exception as ex:
                 self.add_type_url_component.value = ""

@@ -22,7 +22,7 @@ def to_view_model(item: ..., *args, **kwargs):
         size = None
 
     return MessageViewModel(
-        date=item.date, size=size, id_message=item.id, *args, **kwargs
+        date=item.date, size=size, id_message=item.id, message=item.message, filename=item.file.name, *args, **kwargs
     )
 
 
@@ -73,7 +73,7 @@ class TelegramService(BaseService):
             url = base_url + str(msg.id)
             yield DownloadItem(data=to_view_model(msg, url=url), job=job, message=msg)
 
-    async def request_information(self, job: DownloadJob):
+    async def request_information(self, job: DownloadJob, file=None):
         result_parser = parse_telegram_url(job.url)
         if result_parser is None:
             raise Exception("Parser error.")
@@ -96,8 +96,9 @@ class TelegramService(BaseService):
                 logging.warning("Message from telegram is None")
                 return None
             assert isinstance(message, Message), "message not is instance of Message"
+            print("File to save: ", file)
             return DownloadItem(
-                data=to_view_model(message, url=job.url), job=job, message=message
+                data=to_view_model(message, url=job.url, file=file), job=job, message=message
             )
 
 
